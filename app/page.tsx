@@ -1,39 +1,143 @@
-'use client';
+"use client";
 
-import { useChat } from 'ai/react';
+import { useChat } from "ai/react";
+import { useEffect, useRef, useState } from "react";
 
 export default function Chat() {
-  const { messages, input, handleInputChange, handleSubmit } = useChat();
-  return (
-    <div className="flex flex-col items-center w-full py-24 mx-auto">
-      <div className="w-full text-center mb-4 px-4">
-        {/* Ajusta el ancho máximo aquí según necesites */}
-        <div className="text-left inline-block text-sm md:text-base max-w-2xl" style={{ lineHeight: '1.75' }}>
-          <p style={{ marginBottom: '1rem' }}>Please choose one of the following options by typing the number of your choice and :, then enter your input accordingly:</p>
-          {/* Añade un margin bottom a cada párrafo para las líneas en blanco */}
-          <p style={{ marginBottom: '1rem' }}>1: List of Ingredients - Enter a list of ingredients, and I will respond with the name of a dish from Mediterranean cuisine that matches those ingredients, if possible.</p>
-          <p style={{ marginBottom: '1rem' }}>2: Recipe - Enter the name of a dish, and I will provide you with its recipe.</p>
-          <p style={{ marginBottom: '1rem' }}>3: Criticize Recipe - Enter the name of a dish, and I will offer criticism on the recipe, with suggestions on how to make it tastier and fresher.</p>
-          <p style={{ marginBottom: '1rem' }}>Example - 2: Caesar salad</p>
-          <p>Your choice:</p>
+  const {
+    messages,
+    isLoading,
+    append,
+  } = useChat();
+
+  const [imageIsLoading, setImageIsLoading] = useState(false);
+  const [image, setImage] = useState<string | null>(null);
+  const [audioIsLoading, setAudioIsLoading] = useState(false);
+  const [audio, setAudio] = useState<string | null>(null);
+
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop =
+        messagesContainerRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  if (imageIsLoading) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <div className="loader">
+          <div className="animate-pulse flex space-x-4">
+            <div className="rounded-full bg-slate-700 h-10 w-10"></div>
+          </div>
         </div>
       </div>
-      {messages.map((m, index) => (
-        <div key={index} className="whitespace-pre-wrap">
-          {m.role === 'user' ? 'User: ' : 'AI: '}
-          {m.content}
-        </div>
-      ))}
-      
-      <form onSubmit={handleSubmit} className="w-full flex justify-center px-4">
-        <input
-          className="w-full p-2 mt-2 border border-gray-300 rounded shadow text-black max-w-2xl"
-          value={input}
-          placeholder="Enter your choice and input here"
-          onChange={handleInputChange}
+    );
+  }
+
+  if (image) {
+    return (
+      <div className="card w-full h-screen max-w-md py-24 mx-auto stretch">
+        <img src={`data:image/jpeg;base64,${image}`} />
+        <textarea
+          className="mt-4 w-full text-white bg-black h-64"
+          value={messages[messages.length - 1].content}
+          readOnly
         />
-      </form>
+        <div className="flex flex-col justify-center mb-2 items-center">
+          {audio && (
+            <>
+              <p> Listen to the recipe: </p>
+              <audio controls src={audio} className="w-full"></audio>
+            </>
+          )}
+          {!audioIsLoading && !audio && (
+          <button
+            className="bg-blue-500 p-2 text-white rounded shadow-xl"
+            onClick={async () => {
+              setAudioIsLoading(true);
+              const response = await fetch("/api/audio", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  message: messages[messages.length - 1].content,
+                }),
+              });
+              const audioBlob = await response.blob();
+              const audioUrl = URL.createObjectURL(audioBlob);
+              setAudio(audioUrl);
+              setAudioIsLoading(false);
+            }}>
+              Generate Audio
+          </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col w-full h-screen max-w-md py-24 text-white mx-auto stretch">
+      <div className="overflow-auto mb-8 w-full" ref={messagesContainerRef}>
+        {messages.map((m) => (
+          <div
+            key={m.id}
+            className={`whitespace-pre-wrap ${
+              m.role === "user"
+                ? "bg-green-700 p-3 m-2 rounded-lg"
+                : "bg-slate-700 p-3 m-2 rounded-lg"
+            }`}
+          >
+            {m.role === "user" ? "User: " : "AI: "}
+            {m.content}
+          </div>
+        ))}
+
+        {isLoading && (
+          <div className="flex justify-end pr-4">
+            <span className="animate-bounce">...</span>
+          </div>
+        )}
+      </div>
+      <div className="fixed bottom-0 w-full max-w-md">
+        <div className="flex flex-col justify-center mb-2 items-center">
+          {messages.length == 0 && (
+            <button
+              className="bg-blue-500 p-2 top-0 text-white rounded shadow-xl"
+              disabled={isLoading}
+              onClick={() => append({ role: "user", content: "Give me a random recipe" })}>
+              Random Recipe
+            </button>
+          )}
+          {messages.length == 2 && !isLoading && (
+            <button
+              className="bg-blue-500 p-2 text-white rounded shadow-xl"
+              disabled={isLoading}
+              onClick={async () => {
+                setImageIsLoading(true);
+                const response = await fetch("api/images", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    message: messages[messages.length - 1].content,
+                  }),
+                });
+                const data = await response.json();
+                setImage(data);
+                setImageIsLoading(false);
+              }}>
+              Generate image
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
+
 
